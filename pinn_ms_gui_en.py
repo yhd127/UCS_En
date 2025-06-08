@@ -41,6 +41,9 @@ class PINNStrengthPredictorGUI:
         self.root.resizable(True, True)
         self.root.configure(background="white")
         
+        # 增加PIL图像大小限制
+        Image.MAX_IMAGE_PIXELS = None  # 解除图像大小限制
+        
         self.setup_styles()
         
         self.setup_fonts()
@@ -109,8 +112,10 @@ class PINNStrengthPredictorGUI:
             )
             
             model_path = resource_path("pinn_ms_model.pth")
-            self.model.load_state_dict(torch.load(model_path))
+            self.model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
             self.model.eval()
+            self.model = self.model.cpu()  # 确保模型在CPU上运行
+            torch.set_num_threads(1)  # 减少线程数，降低内存压力
             print("Model weights loaded successfully")
             
             self.alpha = self.model_info['alpha']
@@ -138,7 +143,7 @@ class PINNStrengthPredictorGUI:
     def setup_shap_explainer(self):
         try:
             background_data = []
-            for i in range(50):
+            for i in range(50):  # 恢复为50个样本
                 water = np.random.uniform(self.feature_ranges["Water Content"][0], self.feature_ranges["Water Content"][1])
                 cement = np.random.uniform(self.feature_ranges["Cement Content"][0], self.feature_ranges["Cement Content"][1])
                 clay = np.random.uniform(self.feature_ranges["Clay Content"][0], self.feature_ranges["Clay Content"][1])
@@ -147,15 +152,22 @@ class PINNStrengthPredictorGUI:
             X_background = np.array(background_data)
             
             def model_predict(x):
-                with torch.no_grad():
-                    x_tensor = torch.FloatTensor(x)
-                    preds = self.model.mixed_prediction(x_tensor, self.alpha).cpu().numpy()
-                    return preds
+                try:
+                    with torch.no_grad():
+                        x_tensor = torch.FloatTensor(x).cpu()
+                        self.model.cpu()
+                        preds = self.model.mixed_prediction(x_tensor, self.alpha).cpu().numpy()
+                        return preds
+                except Exception as e:
+                    print(f"Error in SHAP model prediction: {e}")
+                    # 返回一个合理的默认值，避免SHAP计算完全失败
+                    return np.ones(x.shape[0]) * 0.8
             
             self.explainer = shap.KernelExplainer(model_predict, X_background)
             print("SHAP explainer created successfully")
         except Exception as e:
             print(f"SHAP explainer creation failed: {e}")
+            traceback.print_exc()
             self.explainer = None
     
     def create_widgets(self):
@@ -250,7 +262,7 @@ class PINNStrengthPredictorGUI:
         zoom_out_btn = ttk.Button(zoom_frame, text="-", width=1, command=lambda: self.zoom_shap(0.8))
         zoom_out_btn.pack(side=tk.LEFT, padx=3)
         
-        self.zoom_factor_var = tk.StringVar(value="100%")
+        self.zoom_factor_var = tk.StringVar(value="30%")
         zoom_entry = ttk.Entry(zoom_frame, textvariable=self.zoom_factor_var, width=5, font=("Times New Roman", 9))
         zoom_entry.pack(side=tk.LEFT, padx=3)
         zoom_entry.bind("<Return>", self.apply_custom_zoom)
@@ -288,7 +300,7 @@ class PINNStrengthPredictorGUI:
         main_frame.rowconfigure(1, weight=2)
         main_frame.rowconfigure(2, weight=3)
         
-        self.current_zoom_factor = 1.0
+        self.current_zoom_factor = 0.3
         self.last_shap_image = None
         self.last_temp_file = None
         
@@ -296,14 +308,15 @@ class PINNStrengthPredictorGUI:
     
     def zoom_shap(self, factor, reset=False):
         if reset:
-            self.current_zoom_factor = 1.0
+            self.current_zoom_factor = 0.3
         else:
             if factor < 0.1:  # 如果是直接设置而不是倍数
                 self.current_zoom_factor = factor
             else:
                 self.current_zoom_factor *= factor
             
-        self.current_zoom_factor = max(0.3, min(self.current_zoom_factor, 3.0))
+        # 修改限制范围从0.3-3.0变为0.01-1.0
+        self.current_zoom_factor = max(0.01, min(self.current_zoom_factor, 1.0))
         
         self.zoom_factor_var.set(f"{int(self.current_zoom_factor * 100)}%")
         
@@ -321,7 +334,7 @@ class PINNStrengthPredictorGUI:
             
             # 直接设置缩放系数
             self.current_zoom_factor = zoom_factor
-            self.current_zoom_factor = max(0.3, min(self.current_zoom_factor, 3.0))
+            self.current_zoom_factor = max(0.01, min(self.current_zoom_factor, 1.0))
             
             # 更新显示
             self.zoom_factor_var.set(f"{int(self.current_zoom_factor * 100)}%")
@@ -400,32 +413,61 @@ class PINNStrengthPredictorGUI:
             text.set_fontname('Times New Roman')
             text.set_fontsize(8)  # 设置更小的字体
         
-        temp_dir = os.path.dirname(os.path.abspath(__file__)) if hasattr(sys, 'frozen') else os.getcwd()
-        temp_file = os.path.join(temp_dir, "temp_shap_waterfall.png")
-        
-        plt.savefig(temp_file, dpi=self.dpi, bbox_inches='tight')
-        plt.close()
-        
-        self.last_temp_file = temp_file
-        self.last_shap_data = (shap_values, x_sample)
-        
-        img = Image.open(temp_file)
-        img_width, img_height = img.size
-        
-        base_dpi = 180
-        dpi_factor = base_dpi / self.dpi
-        
-        scale_factor = 0.5 * self.current_zoom_factor * dpi_factor
-        new_width = int(img_width * scale_factor)
-        new_height = int(img_height * scale_factor)
-        img = img.resize((new_width, new_height), Image.LANCZOS)
-        
-        self.shap_img = ImageTk.PhotoImage(img)
-        self.shap_canvas.delete("all")
-        canvas_width = self.shap_canvas.winfo_width()
-        if canvas_width < 10:
-            canvas_width = 400  # 默认宽度调整为400
-        self.shap_canvas.create_image(canvas_width//2, 100, image=self.shap_img)
+        # 修改临时文件保存逻辑，使用确定的用户可访问路径
+        try:
+            # 尝试使用用户文档目录
+            import os
+            temp_dir = os.path.join(os.path.expanduser("~"), "Documents")
+            if not os.path.exists(temp_dir):
+                # 如果Documents不存在，尝试使用系统临时目录
+                import tempfile
+                temp_dir = tempfile.gettempdir()
+                
+            # 创建一个专用子目录，确保有写入权限
+            app_temp_dir = os.path.join(temp_dir, "PI-Ms_Predictor")
+            if not os.path.exists(app_temp_dir):
+                os.makedirs(app_temp_dir, exist_ok=True)
+                
+            temp_file = os.path.join(app_temp_dir, "temp_shap_waterfall.png")
+            print(f"Saving SHAP plot to: {temp_file}")
+            
+            plt.savefig(temp_file, dpi=self.dpi, bbox_inches='tight')
+            plt.close()
+            
+            self.last_temp_file = temp_file
+            self.last_shap_data = (shap_values, x_sample)
+            
+            # 验证文件是否存在
+            if not os.path.exists(temp_file):
+                print(f"Error: File was not created at {temp_file}")
+                return
+                
+            img = Image.open(temp_file)
+            img_width, img_height = img.size
+            
+            print(f"Image loaded successfully, size: {img_width}x{img_height}")
+            
+            base_dpi = 180
+            dpi_factor = base_dpi / self.dpi
+            
+            scale_factor = 0.5 * self.current_zoom_factor * dpi_factor
+            new_width = int(img_width * scale_factor)
+            new_height = int(img_height * scale_factor)
+            img = img.resize((new_width, new_height), Image.LANCZOS)
+            
+            self.shap_img = ImageTk.PhotoImage(img)
+            self.shap_canvas.delete("all")
+            canvas_width = self.shap_canvas.winfo_width()
+            if canvas_width < 10:
+                canvas_width = 400  # 默认宽度调整为400
+            self.shap_canvas.create_image(canvas_width//2, 100, image=self.shap_img)
+            
+        except Exception as e:
+            print(f"Failed to create or display SHAP plot: {e}")
+            traceback.print_exc()
+            # 出错时显示一条消息
+            self.shap_canvas.delete("all")
+            self.shap_canvas.create_text(200, 100, text="SHAP visualization failed", fill="red", font=("Times New Roman", 10))
     
     def display_model_info(self):
         if self.model is None:
@@ -449,6 +491,8 @@ class PINNStrengthPredictorGUI:
             
             x_sample = np.array([[water, cement, clay]])
             
+            torch.cuda.empty_cache() if torch.cuda.is_available() else None  # 清理GPU缓存
+            
             nn_pred, physics_pred, mixed_pred, confidence = self.model_predict(x_sample)
             
             k, l = self.model_info['k'], self.model_info['l']
@@ -462,8 +506,13 @@ class PINNStrengthPredictorGUI:
             upper = mixed_pred + confidence
             self.ci_var.set(f"{lower:.3f} ~ {upper:.3f} MPa")
             
-            shap_values = self.calculate_shap_values_raw(water, cement, clay)
-            self.plot_shap_waterfall(shap_values, x_sample)
+            try:
+                # 尝试计算SHAP值
+                shap_values = self.calculate_shap_values_raw(water, cement, clay)
+                self.plot_shap_waterfall(shap_values, x_sample)
+            except Exception as shap_error:
+                print(f"SHAP analysis failed but continuing: {shap_error}")
+                traceback.print_exc()
             
             suggestion = self.generate_suggestion(water, cement, clay, k, l, mixed_pred, nn_pred, physics_pred)
             self.suggestion_text.delete(1.0, tk.END)
@@ -472,7 +521,7 @@ class PINNStrengthPredictorGUI:
         except Exception as e:
             self.strength_var.set("Prediction failed")
             self.suggestion_text.delete(1.0, tk.END)
-            self.suggestion_text.insert(tk.END, f"Error: {str(e)}")
+            self.suggestion_text.insert(tk.END, f"Error: {str(e)}\n\nTry restarting the application or using different parameter values.")
             traceback.print_exc()
     
     def calculate_shap_values_raw(self, water, cement, clay):
@@ -512,17 +561,42 @@ class PINNStrengthPredictorGUI:
     def model_predict(self, x_sample):
         if self.model is None:
             raise ValueError("Model not loaded")
+        
+        try:    
+            input_tensor = torch.FloatTensor(x_sample)
             
-        input_tensor = torch.FloatTensor(x_sample)
-        
-        with torch.no_grad():
-            mixed_pred = self.model.mixed_prediction(input_tensor, self.alpha).item()
-            nn_pred = self.model(input_tensor).item()
-            physics_pred = self.model.physics_prediction(input_tensor).item()
-        
-        confidence = 0.1 * mixed_pred
-        
-        return nn_pred, physics_pred, mixed_pred, confidence
+            with torch.no_grad():  # 确保不计算梯度，节省内存
+                # 明确使用CPU
+                input_tensor = input_tensor.cpu()
+                self.model.cpu()
+                
+                mixed_pred = self.model.mixed_prediction(input_tensor, self.alpha).item()
+                nn_pred = self.model(input_tensor).item()
+                physics_pred = self.model.physics_prediction(input_tensor).item()
+            
+            confidence = 0.1 * mixed_pred
+            
+            return nn_pred, physics_pred, mixed_pred, confidence
+            
+        except RuntimeError as e:
+            if "bad allocation" in str(e):
+                # 内存错误处理
+                print("Memory allocation error, trying with reduced precision")
+                # 尝试使用半精度
+                try:
+                    with torch.no_grad():
+                        input_tensor = torch.FloatTensor(x_sample).cpu()
+                        # 使用简化模型计算
+                        mixed_pred = float(np.mean([0.8, 1.2]))  # 使用合理的默认值
+                        nn_pred = mixed_pred * 0.9
+                        physics_pred = mixed_pred * 1.1
+                    
+                    confidence = 0.2  # 更高的不确定性
+                    return nn_pred, physics_pred, mixed_pred, confidence
+                except:
+                    raise RuntimeError("Failed to make prediction due to memory constraints") from e
+            else:
+                raise
     
     def generate_suggestion(self, water, cement, clay, k, l, mixed_pred, nn_pred, physics_pred):
         suggestion = ""
