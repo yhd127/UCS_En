@@ -11,7 +11,7 @@
 2. Open PowerShell (Win+R, then type "powershell")
 3. Navigate to the directory containing the files:
    ```
-   cd "Your downloaded path"    (e.g.: cd "D:\Desktop\EnglishManuscript")
+   cd "Your downloaded path (pinn_ms_gui_en.py and so on)"    (e.g.: cd "D:\Desktop\EnglishManuscript")
    ```
 4. Run the application:
    ```
