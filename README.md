@@ -1,33 +1,37 @@
-PINN-MS Predictor Installation Guide
-Option 1: Using Python Environment (Recommended)
-① Place all files (pinn_ms_gui_en.py, pinn_ms_model.pth, pinn_ms_model_info.pkl, PINN_Msshap.py) in the same directory
+# PI-Ms Soil Strength Prediction System
 
-② Open PowerShell (Press Win+R and type powershell)
+## Running the Application
 
-③ Navigate to your directory:
-cd "Path\to\your\directory"
-# Example:
-# cd "D:\Desktop\manuscript"
+### Method 1: With Python Environment
+1. Place the following files in the same directory:
+   - pinn_ms_gui_en.py
+   - pinn_ms_model.pth
+   - pinn_ms_model_info.pkl
+   - PINN_Msshap.py
+2. Open PowerShell (Win+R, then type "powershell")
+3. Navigate to the directory containing the files:
+   ```
+   cd "Your downloaded path"    (e.g.: cd "D:\Desktop\EnglishManuscript")
+   ```
+4. Run the application:
+   ```
+   python pinn_ms_gui.py
+   ```
+5. Wait approximately 3-30 seconds (depending on your computer's performance)
 
-④ Run the GUI:
-python pinn_ms_gui.py
+**Example:**
+```
+PS C:\Users\17128> cd "E:\1_Py_code\1-PINN training\1-GUI new"
+PS E:\1_Py_code\1-PINN training\1-GUI new> python pinn_ms_gui.py
+```
 
-⏳ Wait 3-30 seconds (depends on your computer's performance)
+**Note:**
+- Python environment installation: https://www.python.org/
+- If you have PyCharm/VSCode, you can run the file directly in the IDE
 
-🖥️ ​Example workflow:​
-PS C:\Users\username> cd "E:\projects\PINN_GUI"
-PS E:\projects\PINN_GUI> python pinn_ms_gui.py
+### Method 2: Without Python Environment
+1. Download the software from this link: [Baidu Cloud Link](https://pan.baidu.com/s/1ZMcLG0_bvWOirdYxPUZo0g)
+   - Extraction code: 4fqn
+2. Double-click "PI-Ms_Predictor.exe" to run the application
 
- ​Notes:​​
-
-Install Python: python.org
-For PyCharm/VSCode users: Open folder and run pinn_ms_gui.py directly
-Option 2: Standalone Executable (No Python Required)
-Download from Baidu Cloud:
-📥 PI-Ms_Predictor Installer
-🔑 Extraction code: 4fqn
-
-Run PI-Ms_Predictor.exe after installation
-
-📧 ​Support:​​
-Report issues to yhd200201@126.com
+If you encounter any issues while using the application, please contact: yhd200201@126.com 
