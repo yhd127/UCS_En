@@ -35,3 +35,6 @@ PS E:\1_Py_code\1-PINN training\1-GUI new> python pinn_ms_gui.py
 2. Double-click "PI-Ms_Predictor.exe" to run the application
 
 If you encounter any issues while using the application, please contact: yhd200201@126.com 
+
+
+The model needs to be modified, and the currently uploaded PI Ms model is a complex version of the network. It will be further simplified in the future
